@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pokémon Chess — แบบเล่นได้ + วิวัฒนาการ</title>
+<style>
+  :root{
+    --bg:#0f1220;
+    --panel:#171a2b;
+    --accent:#8af;
+    --accent2:#ffd166;
+    --good:#51e3a2;
+    --bad:#ff6b6b;
+    --muted:#9aa4bf;
+    --square-a:#2a2f4a;
+    --square-b:#20243b;
+    --hilite:#36406b;
+    --move:#3b6fb6;
+    --capture:#b63b59;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:#e6ecff;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans Thai", "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  }
+  header{
+    padding:16px 20px;
+    display:flex; gap:12px; align-items:center; justify-content:space-between;
+    border-bottom:1px solid #1e2240;
+    background: linear-gradient(180deg, #151935, #12152b 60%);
+  }
+  header h1{
+    margin:0; font-size:18px; letter-spacing:.3px; font-weight:700;
+  }
+  .wrap{
+    display:grid; grid-template-columns: minmax(320px, 680px) 360px;
+    gap:18px; padding:18px; align-items:start;
+  }
+  @media (max-width: 980px){
+    .wrap{ grid-template-columns: 1fr; }
+  }
+  .board{
+    width:100%; aspect-ratio:1/1; border-radius:14px; overflow:hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35), inset 0 0 0 1px #22284c;
+    background: #171a2b;
+    position: relative;
+  }
+  .grid{
+    position:absolute; inset:10px; display:grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); gap:2px;
+  }
+  .sq{
+    border-radius:8px; position:relative; user-select:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px; color:#fff;
+    transition: background .15s ease;
+  }
+  .sq.a{ background: var(--square-a); }
+  .sq.b{ background: var(--square-b); }
+  .sq.sel{ outline:2px solid var(--move); }
+  .sq.h{ background: var(--hilite); }
+  .sq.mv::after{
+    content:''; width:18px; height:18px; border-radius:50%;
+    background:var(--move); opacity:.9;
+    box-shadow:0 0 0 4px rgba(59,111,182,.28);
+  }
+  .sq.cap::after{
+    content:''; width:70%; height:70%; border-radius:12px;
+    border:3px dashed var(--capture);
+    position:absolute; inset:0; margin:auto;
+  }
+  .piece{
+    width:88%; height:88%; border-radius:14px; padding:6px 8px;
+    display:flex; align-items:center; justify-content:space-between; gap:6px;
+    background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow: inset 0 6px 18px rgba(255,255,255,.05), 0 6px 16px rgba(0,0,0,.35);
+    font-weight:700; letter-spacing:.2px;
+  }
+  .w .piece{ color:#e9f2ff; }
+  .b .piece{ color:#e9f2ff; }
+  .tok{
+    flex:0 0 auto; width:34px; height:34px; border-radius:10px;
+    display:grid; place-items:center; font-size:11px; font-weight:800;
+    box-shadow: inset 0 3px 10px rgba(0,0,0,.35);
+  }
+  .w .tok{ background:#3e6cf6; }
+  .b .tok{ background:#a23bd9; }
+  .nm{ flex:1 1 auto; text-align:right; font-size:12px; line-height:1.1; color:#fff }
+  .badge{
+    position:absolute; top:6px; left:6px;
+    background:var(--accent2); color:#211; font-size:10px; padding:2px 6px; border-radius:999px; font-weight:900;
+    box-shadow:0 2px 8px rgba(0,0,0,.35);
+  }
+  .hud{
+    background:var(--panel); border-radius:14px; padding:14px; border:1px solid #21264a;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  .hud h2{ margin:4px 0 10px; font-size:15px; }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;}
+  button{
+    background:#24305d; color:#e8eeff; border:1px solid #2e3b76; padding:10px 12px; border-radius:10px; font-weight:700;
+    cursor:pointer; transition: transform .05s ease, background .2s ease;
+  }
+  button:hover{ background:#2b3a78; }
+  button:active{ transform: translateY(1px) }
+  .small{ padding:6px 8px; font-size:12px }
+  .good{ background:#1f3f3a; border-color:#2b6a5d; }
+  .bad{ background:#472f39; border-color:#7a4056; }
+  .muted{ background:#232840; color:#aab3d9; }
+  .status{ font-size:13px; color:var(--muted); }
+  .log{
+    max-height:210px; overflow:auto; background:#141833; border-radius:10px; padding:8px 10px; border:1px solid #21264a;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size:12px; line-height:1.35;
+  }
+  .legend{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .legend .item{ display:flex; align-items:center; gap:8px; background:#141833; padding:8px; border-radius:10px; border:1px solid #21264a; }
+  .item .tok{ width:28px; height:28px; border-radius:8px; }
+  .k{ background:#ef476f !important }
+  .q{ background:#ffd166 !important; color:#330 }
+  .r{ background:#06d6a0 !important; color:#033 }
+  .b{ background:#118ab2 !important }
+  .n{ background:#9b5de5 !important }
+  .p{ background:#a8dadc !important; color:#033 }
+  .pill{ font-size:11px; padding:3px 8px; border-radius:999px; background:#22305e; border:1px solid #303f75; color:#a0b2ff; }
+  .promo{
+    position:absolute; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center;
+  }
+  .promo .card{
+    background:#151a35; border:1px solid #28316a; border-radius:12px; padding:12px; width:min(560px, 92vw);
+  }
+  .promo h3{ margin:4px 0 10px; font-size:15px }
+  .choices{ display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; }
+  .choice{ background:#1b2146; border:1px solid #2a3572; border-radius:10px; padding:10px; cursor:pointer; }
+  .choice:hover{ background:#212a57; }
+  .note{ color:#93a0d9; font-size:12px }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Pokémon Chess — วิวัฒนาการ & ความสามารถพิเศษ (ทดลอง)</h1>
+    <div class="row">
+      <button id="newGameBtn">เริ่มเกมใหม่</button>
+      <button id="flipBtn" class="muted">สลับมุมมอง</button>
+    </div>
+  </header>
+  <div class="wrap">
+    <div class="board" id="board">
+      <div class="grid" id="grid"></div>
+      <div class="promo" id="promo">
+        <div class="card">
+          <h3>โปรโมตพอน (เลือกวิวัฒนาการ)</h3>
+          <div class="choices" id="promoChoices"></div>
+          <div class="note">เคล็ดลับ: คุณสามารถเลือกแบบ “โปเกม่อนธีม” ด้านล่าง ซึ่งจะเทียบกับ ควีน/รูค/บิชอป/ไนท์</div>
+        </div>
+      </div>
+    </div>
+    <div class="hud">
+      <h2>สถานะเกม</h2>
+      <div class="row">
+        <span class="pill" id="turnPill">ตา: ขาว</span>
+        <span class="pill" id="checkPill" style="display:none; background:#512f3c; border-color:#7a3f56; color:#ffc2cc">เช็ค!</span>
+        <span class="pill" id="evoPill" style="display:none;">ปลดล็อกความสามารถ</span>
+      </div>
+      <div class="status" id="status">เล่นตามกติกาหมากรุกมาตรฐาน + ความสามารถพิเศษเฉพาะตัว (ใช้ได้ครั้งเดียวหลังวิวัฒนาการ)</div>
+      <div class="row">
+        <button id="useAbilityBtn" class="good small" disabled>ใช้สกิลวิวัฒนาการ</button>
+        <button id="cancelAbilityBtn" class="bad small" disabled>ยกเลิกสกิล</button>
+      </div>
+      <h2>บันทึกการเดิน</h2>
+      <div class="log" id="log"></div>
+      <h2>ตำนานหมาก (ธีมโปเกม่อน)</h2>
+      <div class="legend">
+        <div class="item"><div class="tok k">K</div><div>King = Mewtwo<br><small>วิวัฒนาการ: เคยถูกเช็คอย่างน้อย 1 ครั้ง (คอสเมติก)</small></div></div>
+        <div class="item"><div class="tok q">Q</div><div>Queen = Pikachu → Raichu<br><small>วิวัฒนาการ: จับกิน 2 ครั้ง → สกิล Blink (ขยับ 1 ช่องหลังการกิน)</small></div></div>
+        <div class="item"><div class="tok r">R</div><div>Rook = Bulbasaur → Ivysaur<br><small>วิวัฒนาการ: เดินครบ 3 ครั้ง → สกิล Charge (เดินแบบไนท์ได้ 1 เทิร์น)</small></div></div>
+        <div class="item"><div class="tok b">B</div><div>Bishop = Squirtle → Wartortle<br><small>วิวัฒนาการ: ระยะรวมที่เดิน ≥ 12 ช่อง → สกิล Long Step (เพิ่ม 1 ก้าวทแยงหลังจบการเดิน)</small></div></div>
+        <div class="item"><div class="tok n">N</div><div>Knight = Charmander → Charmeleon<br><small>วิวัฒนาการ: กินได้ 1 ครั้ง → สกิล Quick Attack (เดินอีกครั้งต่อเนื่อง)</small></div></div>
+        <div class="item"><div class="tok p">P</div><div>Pawn = Eevee → เลือกโปรโมต (ธีม Jolteon/Flareon/Vaporeon/Espeon)</div></div>
+      </div>
+    </div>
+  </div>
+<script>
+/* ---------------------------------------------
+ * Pokémon Chess — core engine (no external libs)
+ * Rules: standard chess legality (incl. check, castling, en passant, promotion)
+ * Plus per-piece evolution abilities (once after evolving)
+ * --------------------------------------------- */
+const SIZE = 8;
+const WHITE = 'w', BLACK='b';
+const EMPTY = null;
+const PIECES = ['k','q','r','b','n','p']; // lowercase types
+const DIRS = {
+  n:[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]],
+  k:[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]],
+  r:[[1,0],[-1,0],[0,1],[0,-1]],
+  b:[[1,1],[1,-1],[-1,1],[-1,-1]],
+  q:[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]],
+};
+function clone(obj){ return structuredClone(obj); }
+function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+function algebra(r,c){ return 'abcdefgh'[c] + (8-r); }
+function parseAlg(s){ return [8-parseInt(s[1]), 'abcdefgh'.indexOf(s[0])]; }
+
+// Piece sprite label (Pokémon theme)
+function pokeLabel(piece){
+  if(!piece) return '';
+  const {type, color} = piece;
+  const side = color===WHITE?'w':'b';
+  const map = {
+    k:{nm:'Mewtwo', tok:'K'},
+    q:{nm:piece.meta?.evolved?'Raichu':'Pikachu', tok:'Q'},
+    r:{nm:piece.meta?.evolved?'Ivysaur':'Bulbasaur', tok:'R'},
+    b:{nm:piece.meta?.evolved?'Wartortle':'Squirtle', tok:'B'},
+    n:{nm:piece.meta?.evolved?'Charmeleon':'Charmander', tok:'N'},
+    p:{nm:'Eevee', tok:'P'}
+  };
+  const m = map[type]||{nm:type, tok:type.toUpperCase()};
+  return { name:m.nm, tok:m.tok };
+}
+
+// Initial setup FEN
+const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+function fenToState(fen){
+  const [piecePlacement, active, castling, ep, half, full] = fen.split(' ');
+  const rows = piecePlacement.split('/');
+  const board = Array.from({length:8}, ()=>Array(8).fill(EMPTY));
+  rows.forEach((row, rIdx)=>{
+    let c=0;
+    for(const ch of row){
+      if(/\d/.test(ch)){ c += parseInt(ch); }
+      else{
+        const color = ch===ch.toUpperCase()? WHITE: BLACK;
+        const type = ch.toLowerCase();
+        board[rIdx][c++] = makePiece(type,color);
+      }
+    }
+  });
+  return {
+    board,
+    active: active==='w'?WHITE:BLACK,
+    castling: castling==='-'? '' : castling,
+    ep: ep==='-'? null : parseAlg(ep),
+    halfmove: parseInt(half||'0'),
+    fullmove: parseInt(full||'1'),
+    evo: {}, // pieceId -> evolution state
+    lastMove: null,
+    flipped:false,
+    selected:null,
+    legalCache:null,
+    abilityMode:null, // {pieceId, kind, step?}
+    history:[]
+  };
+}
+
+let SID = 1;
+function makePiece(type,color){
+  return { type, color, id: (color+type+(SID++)), meta:{
+    moved:false, captures:0, steps:0, travel:0, evolved:false, abilityUsed:false, wasChecked:false
+  }};
+}
+
+// Utilities to scan attacks
+function squareAttacked(state, r, c, byColor){
+  const board = state.board;
+  // Knights
+  for(const [dr,dc] of DIRS.n){
+    const rr=r+dr, cc=c+dc;
+    if(inBounds(rr,cc)){
+      const p = board[rr][cc];
+      if(p && p.color===byColor && p.type==='n') return true;
+    }
+  }
+  // Kings
+  for(const [dr,dc] of DIRS.k){
+    const rr=r+dr, cc=c+dc;
+    if(inBounds(rr,cc)){
+      const p = board[rr][cc];
+      if(p && p.color===byColor && p.type==='k') return true;
+    }
+  }
+  // Rooks/Queens (lines)
+  for(const [dr,dc] of DIRS.r){
+    let rr=r+dr, cc=c+dc;
+    while(inBounds(rr,cc)){
+      const p = board[rr][cc];
+      if(p){
+        if(p.color===byColor && (p.type==='r'||p.type==='q')) return true;
+        break;
+      }
+      rr+=dr; cc+=dc;
+    }
+  }
+  // Bishops/Queens (diags)
+  for(const [dr,dc] of DIRS.b){
+    let rr=r+dr, cc=c+dc;
+    while(inBounds(rr,cc)){
+      const p = board[rr][cc];
+      if(p){
+        if(p.color===byColor && (p.type==='b'||p.type==='q')) return true;
+        break;
+      }
+      rr+=dr; cc+=dc;
+    }
+  }
+  // Pawns (attacks only)
+  const pawnDir = byColor===WHITE? -1: 1;
+  for(const dc of [-1,1]){
+    const rr=r+pawnDir, cc=c+dc;
+    if(inBounds(rr,cc)){
+      const p = board[rr][cc];
+      if(p && p.color===byColor && p.type==='p') return true;
+    }
+  }
+  return false;
+}
+
+function findKing(state, color){
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p = state.board[r][c];
+    if(p && p.type==='k' && p.color===color) return [r,c];
+  }
+  return null;
+}
+function inCheck(state, color){
+  const k = findKing(state, color);
+  if(!k) return false;
+  return squareAttacked(state, k[0], k[1], color===WHITE?BLACK:WHITE);
+}
+
+// Generate pseudo legal moves for a piece at r,c
+function genPseudoMoves(state, r, c, opts={}){
+  const board = state.board; const p = board[r][c];
+  if(!p) return [];
+  const moves = [];
+  const forward = p.color===WHITE? -1: 1;
+  function push(rr,cc, flags={}){
+    if(!inBounds(rr,cc)) return;
+    const t = board[rr][cc];
+    if(!t){
+      if(!flags.captureOnly){
+        moves.push({from:[r,c], to:[rr,cc], piece:p, flags, capture:null});
+      }
+    }else if(t.color!==p.color){
+      moves.push({from:[r,c], to:[rr,cc], piece:p, flags:{...flags, capture:true}, capture:t});
+    }
+  }
+  if(p.type==='p'){
+    // one forward
+    const r1 = r+forward;
+    if(inBounds(r1,c) && !board[r1][c]){
+      // promotion?
+      push(r1,c,{});
+      // two forward from start
+      const startRank = (p.color===WHITE? 6:1);
+      if(r===startRank){
+        const r2 = r+2*forward;
+        if(!board[r2][c]){
+          moves.push({from:[r,c], to:[r2,c], piece:p, flags:{double:true}, capture:null});
+        }
+      }
+    }
+    // captures
+    for(const dc of [-1,1]){
+      const cc=c+dc;
+      const rr=r+forward;
+      if(inBounds(rr,cc)){
+        const t = board[rr][cc];
+        if(t && t.color!==p.color){
+          moves.push({from:[r,c], to:[rr,cc], piece:p, flags:{capture:true}, capture:t});
+        }
+      }
+    }
+    // en passant
+    if(state.ep){
+      const [er,ec] = state.ep;
+      if(er===r+forward && Math.abs(ec-c)===1){
+        moves.push({from:[r,c], to:[er,ec], piece:p, flags:{enpassant:true, capture:true}, capture: board[r][ec] });
+      }
+    }
+  }else if(p.type==='n'){
+    for(const [dr,dc] of DIRS.n) push(r+dr,c+dc,{});
+  }else if(p.type==='k'){
+    for(const [dr,dc] of DIRS.k) push(r+dr,c+dc,{});
+    // castling
+    // Conditions: not moved, not in check, squares empty and not attacked
+    const rights = state.castling||'';
+    if(!p.meta.moved && !inCheck(state, p.color)){
+      // King side
+      if((p.color===WHITE && rights.includes('K')) || (p.color===BLACK && rights.includes('k'))){
+        const rr=r, cc=c+1, cc2=c+2;
+        if(!board[rr][cc] && !board[rr][cc2] &&
+           !squareAttacked(state, rr, cc, p.color===WHITE?BLACK:WHITE) &&
+           !squareAttacked(state, rr, cc2, p.color===WHITE?BLACK:WHITE)){
+          moves.push({from:[r,c], to:[rr,cc2], piece:p, flags:{castle:'kingside'}});
+        }
+      }
+      // Queen side
+      if((p.color===WHITE && rights.includes('Q')) || (p.color===BLACK && rights.includes('q'))){
+        const rr=r, cc=c-1, cc2=c-2, cc3=c-3;
+        if(!board[rr][cc] && !board[rr][cc2] && !board[rr][cc3] &&
+           !squareAttacked(state, rr, cc, p.color===WHITE?BLACK:WHITE) &&
+           !squareAttacked(state, rr, cc2, p.color===WHITE?BLACK:WHITE)){
+          moves.push({from:[r,c], to:[rr,cc2], piece:p, flags:{castle:'queenside'}});
+        }
+      }
+    }
+  }else{
+    const lines = p.type==='r'? DIRS.r : p.type==='b'? DIRS.b : DIRS.q;
+    for(const [dr,dc] of lines){
+      let rr=r+dr, cc=c+dc;
+      while(inBounds(rr,cc)){
+        const t = board[rr][cc];
+        if(!t){
+          moves.push({from:[r,c], to:[rr,cc], piece:p, flags:{}, capture:null});
+        }else{
+          if(t.color!==p.color) moves.push({from:[r,c], to:[rr,cc], piece:p, flags:{capture:true}, capture:t});
+          break;
+        }
+        rr+=dr; cc+=dc;
+      }
+    }
+  }
+  return moves;
+}
+
+// Make a move on a cloned state; returns new state
+function makeMove(state, move, opts={skipLegality:false}){
+  let s = clone(state);
+  const b = s.board;
+  const [fr,fc] = move.from, [tr,tc]=move.to;
+  const piece = b[fr][fc];
+  if(!piece) return null;
+  // Reset ep by default
+  s.ep = null;
+  // Move piece
+  b[fr][fc]=EMPTY;
+  // En passant capture
+  if(move.flags?.enpassant){
+    const dir = piece.color===WHITE? 1: -1;
+    const capr = tr+dir, capc = tc;
+    s.capture = b[capr][capc];
+    b[capr][capc] = EMPTY;
+  }
+  // Castling: move rook
+  if(move.flags?.castle){
+    if(move.flags.castle==='kingside'){
+      // rook from h-file to f-file
+      const rr = fr, rookFrom = [rr,7], rookTo=[rr,5];
+      b[rookTo[0]][rookTo[1]] = b[rookFrom[0]][rookFrom[1]];
+      if(b[rookTo[0]][rookTo[1]]) b[rookTo[0]][rookTo[1]].meta.moved = true;
+      b[rookFrom[0]][rookFrom[1]] = EMPTY;
+    }else{
+      const rr = fr, rookFrom=[rr,0], rookTo=[rr,3];
+      b[rookTo[0]][rookTo[1]] = b[rookFrom[0]][rookFrom[1]];
+      if(b[rookTo[0]][rookTo[1]]) b[rookTo[0]][rookTo[1]].meta.moved = true;
+      b[rookFrom[0]][rookFrom[1]] = EMPTY;
+    }
+  }
+  // Double pawn sets ep
+  if(piece.type==='p' && move.flags?.double){
+    const epRow = (fr+tr)/2, epCol = fc;
+    s.ep = [epRow, epCol];
+  }
+
+  // Capture overwrite
+  const target = b[tr][tc];
+  if(target){ s.capture = target; }
+
+  b[tr][tc] = piece;
+  piece.meta.moved = true;
+  piece.meta.steps += 1;
+
+  // Update travel distance (taxi metric)
+  piece.meta.travel += Math.abs(fr-tr) + Math.abs(fc-tc);
+  if(s.capture){ piece.meta.captures += 1; }
+
+  // Update castling rights
+  function revoke(side){
+    s.castling = (s.castling||'').replace(side, '');
+    if(s.castling==='') s.castling='';
+  }
+  if(piece.type==='k'){
+    if(piece.color===WHITE){ revoke('K'); revoke('Q'); }
+    else { revoke('k'); revoke('q'); }
+  }
+  // If rook moves, revoke its side
+  if(piece.type==='r'){
+    if(piece.color===WHITE && fr===7 && fc===0) revoke('Q');
+    if(piece.color===WHITE && fr===7 && fc===7) revoke('K');
+    if(piece.color===BLACK && fr===0 && fc===0) revoke('q');
+    if(piece.color===BLACK && fr===0 && fc===7) revoke('k');
+  }
+  // If rook captured, revoke rights accordingly
+  if(s.capture && s.capture.type==='r'){
+    const cap = s.capture;
+    if(cap.color===WHITE && tr===7 && tc===0) revoke('Q');
+    if(cap.color===WHITE && tr===7 && tc===7) revoke('K');
+    if(cap.color===BLACK && tr===0 && tc===0) revoke('q');
+    if(cap.color===BLACK && tr===0 && tc===7) revoke('k');
+  }
+
+  // Halfmove clock
+  if(piece.type==='p' || s.capture) s.halfmove=0; else s.halfmove = (s.halfmove||0)+1;
+  if(piece.color===BLACK) s.fullmove = (s.fullmove||1)+1;
+
+  s.active = piece.color===WHITE? BLACK: WHITE;
+  s.lastMove = move;
+  s.legalCache = null;
+  s.history = s.history || [];
+  s.history.push({move, fen: stateToFen(s)});
+  return s;
+}
+
+// Filter legal moves: simulate and ensure own king not in check
+function genLegalMoves(state, r, c){
+  const p = state.board[r][c]; if(!p || p.color!==state.active) return [];
+  const pseudo = genPseudoMoves(state, r, c);
+  const legals = [];
+  for(const m of pseudo){
+    let s2 = makeMove(state, m);
+    // Promotions handled later at execution; legality identical, so check here
+    if(!inCheck(s2, p.color)) legals.push(m);
+  }
+  return legals;
+}
+
+// Detect checkmate / stalemate
+function anyLegalMoves(state, color){
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p = state.board[r][c];
+    if(p && p.color===color){
+      const ms = genLegalMoves(state,r,c);
+      if(ms.length>0) return true;
+    }
+  }
+  return false;
+}
+
+function stateToFen(state){
+  const b = state.board;
+  let parts=[];
+  for(let r=0;r<8;r++){
+    let row=''; let empty=0;
+    for(let c=0;c<8;c++){
+      const p = b[r][c];
+      if(!p){ empty++; }
+      else{
+        if(empty>0){ row+=empty; empty=0; }
+        const ch = p.type.toUpperCase();
+        row += (p.color===WHITE? ch : ch.toLowerCase());
+      }
+    }
+    if(empty>0) row+=empty;
+    parts.push(row);
+  }
+  const active = state.active;
+  const castling = state.castling || '-';
+  const ep = state.ep? algebra(state.ep[0], state.ep[1]) : '-';
+  return parts.join('/') + ' ' + active + ' ' + castling + ' ' + ep + ' ' + (state.halfmove||0) + ' ' + (state.fullmove||1);
+}
+
+// Evolution logic & abilities
+function checkEvolution(piece){
+  // Evolve conditions (once)
+  if(piece.meta.evolved) return;
+  if(piece.type==='n' && piece.meta.captures>=1){ piece.meta.evolved=true; }
+  if(piece.type==='r' && piece.meta.steps>=3){ piece.meta.evolved=true; }
+  if(piece.type==='b' && piece.meta.travel>=12){ piece.meta.evolved=true; }
+  if(piece.type==='q' && piece.meta.captures>=2){ piece.meta.evolved=true; }
+  if(piece.type==='k' && piece.meta.wasChecked){ piece.meta.evolved=true; }
+  // pawn evolves via promotion, handled separately
+}
+
+function canUseAbility(state, piece){
+  if(!piece.meta.evolved || piece.meta.abilityUsed) return null;
+  if(piece.color!==state.active) return null;
+  // Only allow when selected
+  if(state.selected && state.board[state.selected[0]][state.selected[1]]?.id!==piece.id) return null;
+  // Ability per type
+  if(piece.type==='n') return {kind:'quick'}; // move twice
+  if(piece.type==='r') return {kind:'charge'}; // move like knight this turn
+  if(piece.type==='b') return {kind:'longstep'}; // +1 diagonal after
+  if(piece.type==='q') return {kind:'blink'}; // +1 king step after capture
+  // k none, p none
+  return null;
+}
+
+// UI rendering
+const gridEl = document.getElementById('grid');
+const statusEl = document.getElementById('status');
+const turnPill = document.getElementById('turnPill');
+const checkPill = document.getElementById('checkPill');
+const evoPill = document.getElementById('evoPill');
+const logEl = document.getElementById('log');
+const useAbilityBtn = document.getElementById('useAbilityBtn');
+const cancelAbilityBtn = document.getElementById('cancelAbilityBtn');
+const promoOverlay = document.getElementById('promo');
+const promoChoices = document.getElementById('promoChoices');
+
+let S = fenToState(START_FEN);
+
+function newGame(){
+  S = fenToState(START_FEN);
+  S.castling = 'KQkq';
+  S.halfmove = 0; S.fullmove=1;
+  S.history = [];
+  render();
+  logEl.textContent = '';
+  log("เริ่มเกมใหม่");
+}
+
+function flip(){
+  S.flipped = !S.flipped;
+  render();
+}
+
+function render(){
+  gridEl.innerHTML = '';
+  const orderRows = [...Array(8).keys()].map(i=>i);
+  const orderCols = [...Array(8).keys()].map(i=>i);
+  if(S.flipped){ orderRows.reverse(); orderCols.reverse(); }
+  for(const r of orderRows){
+    for(const c of orderCols){
+      const sq = document.createElement('div');
+      const colorSquare = ((r+c)%2===0)?'a':'b';
+      sq.className = 'sq '+colorSquare+(S.selected && S.selected[0]===r && S.selected[1]===c?' sel':'');
+      sq.dataset.r = r; sq.dataset.c = c;
+      const p = S.board[r][c];
+      if(p){
+        const {name, tok} = pokeLabel(p);
+        const wrap = document.createElement('div');
+        wrap.className = 'piece '+ (p.color==='w'?'w':'b');
+        const tokEl = document.createElement('div');
+        tokEl.className = 'tok '+p.type;
+        tokEl.textContent = tok;
+        const nmEl = document.createElement('div');
+        nmEl.className = 'nm';
+        nmEl.textContent = name;
+        wrap.appendChild(tokEl); wrap.appendChild(nmEl);
+        sq.appendChild(wrap);
+        if(p.meta.evolved && !p.meta.abilityUsed && ['n','r','b','q'].includes(p.type)){
+          const badge = document.createElement('div');
+          badge.className = 'badge';
+          badge.textContent = '★ Evolved';
+          sq.appendChild(badge);
+        }
+      }
+      gridEl.appendChild(sq);
+    }
+  }
+  // Highlights for selection
+  if(S.selected){
+    const legals = genLegalMoves(S, S.selected[0], S.selected[1]);
+    for(const mv of legals){
+      const [rr,cc] = S.flipped? flipCoord(mv.to) : mv.to;
+      const idx = (orderRows.indexOf(rr))*8 + (orderCols.indexOf(cc));
+      const el = gridEl.children[idx];
+      const tgt = S.board[mv.to[0]][mv.to[1]];
+      el.classList.add(tgt? 'cap' : 'mv');
+    }
+  }
+  // Update HUD
+  const inCk = inCheck(S, S.active);
+  turnPill.textContent = 'ตา: '+ (S.active==='w'?'ขาว':'ดำ');
+  checkPill.style.display = inCk? 'inline-flex':'none';
+  // Evolve pill if selected piece can use
+  if(S.selected){
+    const p = S.board[S.selected[0]][S.selected[1]];
+    const ab = p? canUseAbility(S,p): null;
+    evoPill.style.display = ab? 'inline-flex':'none';
+    useAbilityBtn.disabled = !ab;
+    cancelAbilityBtn.disabled = !S.abilityMode;
+  }else{
+    evoPill.style.display='none';
+    useAbilityBtn.disabled=true;
+    cancelAbilityBtn.disabled = !S.abilityMode;
+  }
+  // Status
+  const me = S.active==='w'?'ฝ่ายขาว':'ฝ่ายดำ';
+  let desc = inCk? `${me} ถูกเช็ค` : `${me} ถึงตาเดิน`;
+  // End checks
+  if(!anyLegalMoves(S, S.active)){
+    if(inCk) desc = 'เช็คเมท — ฝ่าย '+(S.active==='w'?'ขาว':'ดำ')+' แพ้';
+    else desc = 'เสมอ (Stalemate)';
+  }
+  statusEl.textContent = desc;
+}
+
+function flipCoord([r,c]){
+  return [7-r, 7-c];
+}
+
+gridEl.addEventListener('click', onClickSquare);
+
+function onClickSquare(e){
+  const sq = e.target.closest('.sq'); if(!sq) return;
+  const r = parseInt(sq.dataset.r), c = parseInt(sq.dataset.c);
+  const p = S.board[r][c];
+  // If ability second-step modes require continuing with same piece
+  if(S.abilityMode){
+    return handleAbilityClick(r,c);
+  }
+  if(S.selected){
+    const from = S.selected;
+    const piece = S.board[from[0]][from[1]];
+    if(!piece || piece.color!==S.active){ S.selected=null; render(); return; }
+    const moves = genLegalMoves(S, from[0], from[1]);
+    const chosen = moves.find(m=>m.to[0]===r && m.to[1]===c);
+    if(chosen){
+      // Handle promotion if pawn reaches last rank
+      if(piece.type==='p' && (r===0 || r===7)){
+        showPromotion(from, [r,c], piece);
+        return;
+      }
+      // Execute standard move
+      commitMove(chosen);
+      // Post-move ability hooks (queen blink, bishop longstep second step, knight quick second move)
+      postMoveAbilityPrompt(chosen);
+      return;
+    }else{
+      // Reselect if clicking own piece
+      if(p && p.color===S.active){ S.selected=[r,c]; render(); return; }
+      // Else clear
+      S.selected=null; render(); return;
+    }
+  }else{
+    if(p && p.color===S.active){
+      S.selected=[r,c]; render();
+    }
+  }
+}
+
+function commitMove(move){
+  const before = clone(S);
+  S = makeMove(S, move);
+  // Mark checked status for kings (for evolve)
+  if(inCheck(before, before.active)){ // before.active was side to move; if was in check and escaped -> mark king's wasChecked
+    const kPos = findKing(S, before.active);
+    if(kPos){
+      const k = S.board[kPos[0]][kPos[1]];
+      if(k) k.meta.wasChecked = true;
+    }
+  }
+  // Update evolution flags for moved piece
+  const [tr,tc] = move.to; const movedPiece = S.board[tr][tc];
+  if(movedPiece){ checkEvolution(movedPiece); }
+  if(S.capture){ checkEvolution(movedPiece); } // capturing may trigger evolve
+  logMove(move);
+  S.selected=null;
+  render();
+}
+
+function log(t){
+  logEl.textContent += t + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function logMove(m){
+  const from = algebra(m.from[0],m.from[1]);
+  const to = algebra(m.to[0],m.to[1]);
+  const p = m.piece;
+  const cap = m.flags?.capture?'x':'';
+  const name = ({k:'K',q:'Q',r:'R',b:'B',n:'N',p:''})[p.type];
+  log(((S.active===WHITE)? (S.fullmove-1): S.fullmove)+". "+ (p.color===BLACK? '.. ':'') + name + from + cap + to + (m.flags?.castle?' (O-O'+(m.flags.castle==='queenside'?'-O':'')+')':'') );
+}
+
+// Promotion UI
+function showPromotion(from, to, pawn){
+  promoOverlay.style.display='flex';
+  promoChoices.innerHTML='';
+  const options = [
+    {type:'q', label:'Raichu (Queen)'},
+    {type:'r', label:'Flareon (Rook)'},
+    {type:'b', label:'Vaporeon (Bishop)'},
+    {type:'n', label:'Espeon (Knight)'},
+  ];
+  for(const opt of options){
+    const el = document.createElement('div');
+    el.className='choice';
+    el.innerHTML = `<div class="row"><div class="tok ${opt.type}">${opt.type.toUpperCase()}</div><div>${opt.label}</div></div>`;
+    el.addEventListener('click', ()=>{
+      promoOverlay.style.display='none';
+      // Build a synthetic move, then replace piece type
+      const move = genLegalMoves(S, from[0], from[1]).find(m=>m.to[0]===to[0] && m.to[1]===to[1]);
+      if(!move){ return; }
+      commitMove(move);
+      // Change type to chosen
+      const [r,c] = to;
+      const np = S.board[r][c];
+      np.type = opt.type;
+      np.meta.evolved = true; // treat as evolved form
+      render();
+      log("โปรโมตเป็น "+opt.label);
+    });
+    promoChoices.appendChild(el);
+  }
+}
+
+// Ability usage
+document.getElementById('useAbilityBtn').addEventListener('click', ()=>{
+  if(!S.selected) return;
+  const p = S.board[S.selected[0]][S.selected[1]];
+  const ab = p? canUseAbility(S,p): null;
+  if(!ab) return;
+  // Enter ability mode
+  S.abilityMode = {pieceId:p.id, kind:ab.kind, step:0, origin:S.selected};
+  statusEl.textContent = "โหมดสกิล: "+abilityName(ab.kind)+" — เลือกช่องปลายทาง";
+  render();
+});
+document.getElementById('cancelAbilityBtn').addEventListener('click', ()=>{
+  S.abilityMode = null; render();
+});
+function abilityName(kind){
+  return {quick:'Quick Attack (เดินอีกครั้งต่อเนื่อง)',
+          charge:'Charge (รูคเดินแบบไนท์ได้ 1 เทิร์น)',
+          longstep:'Long Step (บิชอปเพิ่ม 1 ก้าวทแยงหลังเดิน)',
+          blink:'Blink (ควีนขยับ 1 ช่องหลังการกิน)'}[kind] || kind;
+}
+
+function handleAbilityClick(r,c){
+  const mode = S.abilityMode;
+  if(!mode) return;
+  // Must operate on the same piece
+  const [sr,sc]=mode.step===0? S.selected : mode.origin;
+  const piece = S.board[sr][sc];
+  if(!piece || piece.id!==mode.pieceId){ S.abilityMode=null; render(); return; }
+
+  if(mode.kind==='charge'){
+    // Rook moving like a knight as a single move
+    // Build pseudo knight moves and filter legality
+    const targets = [];
+    for(const [dr,dc] of DIRS.n){
+      const rr=sr+dr, cc=sc+dc;
+      if(!inBounds(rr,cc)) continue;
+      const t = S.board[rr][cc];
+      if(!t || t.color!==piece.color){
+        targets.push([rr,cc]);
+      }
+    }
+    const chosen = targets.find(x=>x[0]===r && x[1]===c);
+    if(chosen){
+      // Create a fake move and validate final state
+      const mv = {from:[sr,sc], to:[r,c], piece, flags:{}, capture: S.board[r][c]||null};
+      let S2 = makeMove(S, mv);
+      if(!inCheck(S2, piece.color)){
+        S = S2;
+        piece.meta.abilityUsed = true;
+        log("ใช้สกิล Charge กับ Rook → เดินแบบไนท์");
+        S.selected=null; S.abilityMode=null; render();
+        // Post ability hooks (none specific)
+        return;
+      }
+    }
+    // else ignore click
+    return;
+  }
+  if(mode.kind==='quick'){
+    // Knight already moved once this turn; allow a second knight move from current square
+    // If step==0, we must first do a normal legal move selected via normal flow, so here we expect step==1
+    if(mode.step===0){
+      // entering quick mode requires we already moved? We'll guide: Quick used after doing the 1st move
+      S.abilityMode=null; render(); return;
+    }else{
+      // second step from mode.origin (which stores new square)
+      const from = mode.origin;
+      const targets = DIRS.n.map(([dr,dc])=>[from[0]+dr, from[1]+dc]).filter(([rr,cc])=>inBounds(rr,cc));
+      const ok = targets.some(([rr,cc])=> rr===r && cc===c && (!S.board[r][c] || S.board[r][c].color!==piece.color));
+      if(ok){
+        const mv = {from:from, to:[r,c], piece, flags:{}, capture:S.board[r][c]||null};
+        let S2 = makeMove(S, mv);
+        if(!inCheck(S2, piece.color)){
+          S = S2;
+          piece.meta.abilityUsed = true;
+          log("ใช้สกิล Quick Attack กับ Knight → เดินต่ออีกครั้ง");
+          S.selected=null; S.abilityMode=null; render();
+          return;
+        }
+      }
+      return;
+    }
+  }
+  if(mode.kind==='longstep'){
+    // After a normal bishop move, allow +1 diagonal step. Here we expect clicking the extra step.
+    const from = mode.origin;
+    const dr = r - from[0], dc = c - from[1];
+    if(Math.abs(dr)===1 && Math.abs(dc)===1){
+      if(!S.board[r][c]){
+        const mv = {from:from, to:[r,c], piece, flags:{}, capture:null};
+        let S2 = makeMove(S, mv);
+        if(!inCheck(S2, piece.color)){
+          S = S2; piece.meta.abilityUsed = true;
+          log("ใช้สกิล Long Step กับ Bishop → ก้าวทแยงเพิ่ม 1 ช่อง");
+          S.selected=null; S.abilityMode=null; render(); return;
+        }
+      }
+    }
+    return;
+  }
+  if(mode.kind==='blink'){
+    // Queen may step 1 square king-like after capture; expect a king-like 1-step to empty
+    const from = mode.origin;
+    const dr = Math.abs(r-from[0]), dc = Math.abs(c-from[1]);
+    if(dr<=1 && dc<=1 && (dr+dc)>0 && !S.board[r][c]){
+      const mv = {from:from, to:[r,c], piece, flags:{}, capture:null};
+      let S2 = makeMove(S, mv);
+      if(!inCheck(S2, piece.color)){
+        S = S2; piece.meta.abilityUsed = true;
+        log("ใช้สกิล Blink กับ Queen → ขยับ 1 ช่องหลังการกิน");
+        S.selected=null; S.abilityMode=null; render(); return;
+      }
+    }
+    return;
+  }
+}
+
+// After a standard move, decide if we should enter ability mode for certain abilities
+function postMoveAbilityPrompt(move){
+  const piece = S.board[move.to[0]][move.to[1]];
+  if(!piece) return;
+  // Knight: Quick Attack can only be used AFTER it moved (and evolved & not used)
+  if(piece.type==='n' && piece.meta.evolved && !piece.meta.abilityUsed){
+    // Enter mode for second step now
+    S.selected = [move.to[0], move.to[1]];
+    S.abilityMode = {pieceId:piece.id, kind:'quick', step:1, origin:[move.to[0], move.to[1]]};
+    statusEl.textContent = "Knight (Charmeleon) ใช้ Quick Attack: เลือกตำแหน่งที่ 2";
+    render();
+    return;
+  }
+  // Bishop long step: only trigger if evolved, not used; allow optional extra step now
+  if(piece.type==='b' && piece.meta.evolved && !piece.meta.abilityUsed){
+    S.selected = [move.to[0], move.to[1]];
+    S.abilityMode = {pieceId:piece.id, kind:'longstep', step:1, origin:[move.to[0], move.to[1]]};
+    statusEl.textContent = "Bishop (Wartortle) ใช้ Long Step: เลือกเพิ่ม 1 ช่องทแยง (ไม่บังคับ)";
+    render();
+    return;
+  }
+  // Queen blink: only after a capture
+  if(piece.type==='q' && move.flags?.capture && piece.meta.evolved && !piece.meta.abilityUsed){
+    S.selected = [move.to[0], move.to[1]];
+    S.abilityMode = {pieceId:piece.id, kind:'blink', step:1, origin:[move.to[0], move.to[1]]};
+    statusEl.textContent = "Queen (Raichu) ใช้ Blink: ขยับเพิ่ม 1 ช่อง (ไม่บังคับ)";
+    render();
+    return;
+  }
+}
+
+document.getElementById('newGameBtn').addEventListener('click', newGame);
+document.getElementById('flipBtn').addEventListener('click', flip);
+
+newGame();
+</script>
+</body>
+</html>
